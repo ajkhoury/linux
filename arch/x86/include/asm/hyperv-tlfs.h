@@ -711,32 +711,6 @@ union hv_msi_entry {
 	} __packed;
 };
 
-struct hv_x64_segment_register {
-	u64 base;
-	u32 limit;
-	u16 selector;
-	union {
-		struct {
-			u16 segment_type : 4;
-			u16 non_system_segment : 1;
-			u16 descriptor_privilege_level : 2;
-			u16 present : 1;
-			u16 reserved : 4;
-			u16 available : 1;
-			u16 _long : 1;
-			u16 _default : 1;
-			u16 granularity : 1;
-		} __packed;
-		u16 attributes;
-	};
-} __packed;
-
-struct hv_x64_table_register {
-	u16 pad[3];
-	u16 limit;
-	u64 base;
-} __packed;
-
 struct hv_init_vp_context {
 	u64 rip;
 	u64 rsp;
