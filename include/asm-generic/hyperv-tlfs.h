@@ -157,6 +157,8 @@ union hv_reference_tsc_msr {
 #define HVCALL_INITIALIZE_PARTITION		0x0041
 #define HVCALL_FINALIZE_PARTITION		0x0042
 #define HVCALL_DELETE_PARTITION			0x0043
+#define HVCALL_GET_PARTITION_PROPERTY		0x0044
+#define HVCALL_SET_PARTITION_PROPERTY		0x0045
 #define HVCALL_GET_PARTITION_ID			0x0046
 #define HVCALL_DEPOSIT_MEMORY			0x0048
 #define HVCALL_WITHDRAW_MEMORY			0x0049
@@ -897,6 +899,23 @@ struct hv_map_vp_state_page_in {
 
 struct hv_map_vp_state_page_out {
 	u64 map_location; /* page number */
+} __packed;
+
+struct hv_get_partition_property_in {
+	u64 partition_id;
+	u32 property_code; /* enum hv_partition_property_code */
+        u32 padding;
+} __packed;
+
+struct hv_get_partition_property_out {
+	u64 property_value;
+} __packed;
+
+struct hv_set_partition_property {
+	u64 partition_id;
+	u32 property_code; /* enum hv_partition_property_code */
+        u32 padding;
+	u64 property_value;
 } __packed;
 
 #endif
