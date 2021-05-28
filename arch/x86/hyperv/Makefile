@@ -6,3 +6,4 @@ obj-$(CONFIG_HYPERV_VTL_MODE)	+= hv_vtl.o
 ifdef CONFIG_X86_64
 obj-$(CONFIG_PARAVIRT_SPINLOCKS)	+= hv_spinlock.o
 endif
+
