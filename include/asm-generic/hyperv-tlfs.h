@@ -175,6 +175,7 @@ union hv_reference_tsc_msr {
 #define HVCALL_MAP_DEVICE_INTERRUPT		0x007c
 #define HVCALL_UNMAP_DEVICE_INTERRUPT		0x007d
 #define HVCALL_RETARGET_INTERRUPT		0x007e
+#define HVCALL_ASSERT_VIRTUAL_INTERRUPT		0x0094
 #define HVCALL_START_VP				0x0099
 #define HVCALL_GET_VP_ID_FROM_APIC_ID		0x009a
 #define HVCALL_FLUSH_GUEST_PHYSICAL_ADDRESS_SPACE 0x00af
@@ -836,6 +837,16 @@ struct hv_install_intercept {
 	u32 access_type; /* mask */
 	u32 intercept_type;
 	union hv_intercept_parameters intercept_parameter;
+} __packed;
+
+struct hv_assert_virtual_interrupt {
+	u64 partition_id;
+	union hv_interrupt_control control;
+	u64 dest_addr; /* cpu's apic id */
+	u32 vector;
+	u8 target_vtl;
+	u8 rsvd_z0;
+	u16 rsvd_z1;
 } __packed;
 
 #endif
