@@ -70,3 +70,12 @@ will be supported when the core API is stable.
 This ioctl creates a guest partition, returning a file descriptor to use as a
 handle for partition ioctls.
 
+3.4 MSHV_CREATE_VP
+------------------
+:Type: partition ioctl
+:Parameters: struct mshv_create_vp
+:Returns: vp file descriptor, or -1 on failure
+
+Create a virtual processor in a guest partition, returning a file descriptor to
+represent the vp and perform ioctls on.
+
