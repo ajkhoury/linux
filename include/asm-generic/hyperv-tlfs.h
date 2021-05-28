@@ -168,6 +168,7 @@ union hv_reference_tsc_msr {
 #define HVCALL_CREATE_VP			0x004e
 #define HVCALL_GET_VP_REGISTERS			0x0050
 #define HVCALL_SET_VP_REGISTERS			0x0051
+#define HVCALL_TRANSLATE_VIRTUAL_ADDRESS	0x0052
 #define HVCALL_POST_MESSAGE			0x005c
 #define HVCALL_SIGNAL_EVENT			0x005d
 #define HVCALL_POST_DEBUG_DATA			0x0069
@@ -916,6 +917,18 @@ struct hv_set_partition_property {
 	u32 property_code; /* enum hv_partition_property_code */
         u32 padding;
 	u64 property_value;
+} __packed;
+
+struct hv_translate_virtual_address_in {
+	u64 partition_id;
+	u32 vp_index;
+	u64 control_flags;
+	u64 gva_page;
+} __packed;
+
+struct hv_translate_virtual_address_out {
+	union hv_translate_gva_result translation_result;
+	u64 gpa_page;
 } __packed;
 
 #endif
