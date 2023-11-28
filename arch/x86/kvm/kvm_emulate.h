@@ -13,6 +13,7 @@
 #define _ASM_X86_KVM_X86_EMULATE_H
 
 #include <asm/desc_defs.h>
+#include <linux/kvm_types.h>
 #include "fpu.h"
 
 struct x86_emulate_ctxt;
