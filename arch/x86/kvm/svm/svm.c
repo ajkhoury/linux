@@ -106,6 +106,8 @@ static const struct svm_direct_access_msrs {
 	{ .index = MSR_EFER,				.always = false },
 	{ .index = MSR_IA32_CR_PAT,			.always = false },
 	{ .index = MSR_AMD64_SEV_ES_GHCB,		.always = true  },
+	{ .index = MSR_IA32_MPERF,			.always = false },
+	{ .index = MSR_IA32_APERF,			.always = false },
 	{ .index = MSR_TSC_AUX,				.always = false },
 	{ .index = X2APIC_MSR(APIC_ID),			.always = false },
 	{ .index = X2APIC_MSR(APIC_LVR),		.always = false },
@@ -1238,6 +1240,12 @@ static inline void init_vmcb_after_set_cpuid(struct kvm_vcpu *vcpu)
 		/* No need to intercept these MSRs */
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SYSENTER_EIP, 1, 1);
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SYSENTER_ESP, 1, 1);
+
+		if (guest_support_amperf(vcpu)) {
+			set_msr_interception(vcpu, svm->msrpm, MSR_IA32_MPERF, 1, 0);
+			set_msr_interception(vcpu, svm->msrpm, MSR_IA32_APERF, 1, 0);
+			vcpu->arch.hwp.fast_path = true;
+		}
 	}
 }
 
@@ -3176,6 +3184,13 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		svm->msr_decfg = data;
 		break;
 	}
+	case MSR_IA32_APERF:
+	case MSR_IA32_MPERF:
+		if (vcpu->arch.hwp.fast_path) {
+			set_msr_interception(vcpu, svm->msrpm, MSR_IA32_MPERF, 0, 0);
+			set_msr_interception(vcpu, svm->msrpm, MSR_IA32_APERF, 0, 0);
+		}
+		return kvm_set_msr_common(vcpu, msr);
 	default:
 		return kvm_set_msr_common(vcpu, msr);
 	}

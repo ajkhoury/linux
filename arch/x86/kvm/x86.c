@@ -1492,6 +1492,8 @@ static const u32 msrs_to_save_pmu[] = {
 	MSR_F15H_PERF_CTR0, MSR_F15H_PERF_CTR1, MSR_F15H_PERF_CTR2,
 	MSR_F15H_PERF_CTR3, MSR_F15H_PERF_CTR4, MSR_F15H_PERF_CTR5,
 
+	MSR_IA32_APERF, MSR_IA32_MPERF,
+
 	MSR_AMD64_PERF_CNTR_GLOBAL_CTL,
 	MSR_AMD64_PERF_CNTR_GLOBAL_STATUS,
 	MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_CLR,
@@ -3979,6 +3981,16 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		vcpu->arch.guest_fpu.xfd_err = data;
 		break;
 #endif
+	case MSR_IA32_APERF:
+	case MSR_IA32_MPERF:
+		/* Ignore meaningless value overrides from user space.*/
+		if (msr_info->host_initiated)
+			return 0;
+		if (!guest_support_amperf(vcpu))
+			return 1;
+		vcpu->arch.hwp.msrs[MSR_IA32_APERF - msr] = data;
+		vcpu->arch.hwp.fast_path = false;
+		break;
 	default:
 		if (kvm_pmu_is_valid_msr(vcpu, msr))
 			return kvm_pmu_set_msr(vcpu, msr_info);
@@ -4336,6 +4348,16 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		msr_info->data = vcpu->arch.guest_fpu.xfd_err;
 		break;
 #endif
+	case MSR_IA32_APERF:
+	case MSR_IA32_MPERF: {
+		u64 value;
+		if (!msr_info->host_initiated && !guest_support_amperf(vcpu))
+			return 1;
+		value = vcpu->arch.hwp.msrs[MSR_IA32_APERF - msr_info->index];
+		msr_info->data = (msr_info->index == MSR_IA32_APERF) ? value :
+			kvm_scale_tsc(value, vcpu->arch.tsc_scaling_ratio);
+		break;
+	}
 	default:
 		if (kvm_pmu_is_valid_msr(vcpu, msr_info->index))
 			return kvm_pmu_get_msr(vcpu, msr_info);
@@ -10494,6 +10516,53 @@ void __kvm_request_immediate_exit(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_GPL(__kvm_request_immediate_exit);
 
+static inline void get_host_amperf(u64 msrs[KVM_MAX_NUM_HWP_MSR])
+{
+	rdmsrl(MSR_IA32_APERF, msrs[KVM_HWP_MSR_APERF]);
+	rdmsrl(MSR_IA32_MPERF, msrs[KVM_HWP_MSR_MPERF]);
+}
+
+static inline u64 get_amperf_delta(u64 enter, u64 exit)
+{
+	if (likely(exit >= enter))
+		return exit - enter;
+	return ULONG_MAX - enter + exit;
+}
+
+static inline void update_vcpu_amperf(struct kvm_vcpu *vcpu, u64 adelta, u64 mdelta)
+{
+	u64 aperf_left, mperf_left, delta, tmp;
+
+	aperf_left = ULONG_MAX - vcpu->arch.hwp.msrs[KVM_HWP_MSR_APERF];
+	mperf_left = ULONG_MAX - vcpu->arch.hwp.msrs[KVM_HWP_MSR_MPERF];
+
+	/* Fast path when neither MSR overflows */
+	if (adelta <= aperf_left && mdelta <= mperf_left) {
+		vcpu->arch.hwp.msrs[KVM_HWP_MSR_APERF] += adelta;
+		vcpu->arch.hwp.msrs[KVM_HWP_MSR_MPERF] += mdelta;
+		return;
+	}
+
+	/* When either MSR overflows, both MSRs are reset to zero and continue to increment. */
+	delta = min(adelta, mdelta);
+	if (delta > aperf_left || delta > mperf_left) {
+		tmp = max(vcpu->arch.hwp.msrs[KVM_HWP_MSR_APERF],
+			  vcpu->arch.hwp.msrs[KVM_HWP_MSR_MPERF]);
+		tmp = delta - (ULONG_MAX - tmp) - 1;
+		vcpu->arch.hwp.msrs[KVM_HWP_MSR_APERF] = tmp + adelta - delta;
+		vcpu->arch.hwp.msrs[KVM_HWP_MSR_MPERF] = tmp + mdelta - delta;
+		return;
+	}
+
+	if (mdelta > adelta && mdelta > aperf_left) {
+		vcpu->arch.hwp.msrs[KVM_HWP_MSR_APERF] = 0;
+		vcpu->arch.hwp.msrs[KVM_HWP_MSR_MPERF] = mdelta - mperf_left - 1;
+	} else {
+		vcpu->arch.hwp.msrs[KVM_HWP_MSR_APERF] = adelta - aperf_left - 1;
+		vcpu->arch.hwp.msrs[KVM_HWP_MSR_MPERF] = 0;
+	}
+}
+
 /*
  * Called within kvm->srcu read side.
  * Returns 1 to let vcpu_run() continue the guest execution loop without
@@ -10507,7 +10576,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		dm_request_for_irq_injection(vcpu) &&
 		kvm_cpu_accept_dm_intr(vcpu);
 	fastpath_t exit_fastpath;
-
+	u64 before[2], after[2];
 	bool req_immediate_exit = false;
 
 	if (kvm_request_pending(vcpu)) {
@@ -10772,8 +10841,19 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		 */
 		WARN_ON_ONCE((kvm_vcpu_apicv_activated(vcpu) != kvm_vcpu_apicv_active(vcpu)) &&
 			     (kvm_get_apic_mode(vcpu) != LAPIC_MODE_DISABLED));
+		
+		if (likely(vcpu->arch.hwp.fast_path)) {
+			exit_fastpath = static_call(kvm_x86_vcpu_run)(vcpu);
+		} else {
+			get_host_amperf(before);
+			exit_fastpath = static_call(kvm_x86_vcpu_run)(vcpu);
+			get_host_amperf(after);
+			update_vcpu_amperf(vcpu, get_amperf_delta(before[KVM_HWP_MSR_APERF],
+								  after[KVM_HWP_MSR_APERF]),
+						 get_amperf_delta(before[KVM_HWP_MSR_MPERF],
+								  after[KVM_HWP_MSR_MPERF]));
+		}
 
-		exit_fastpath = static_call(kvm_x86_vcpu_run)(vcpu);
 		if (likely(exit_fastpath != EXIT_FASTPATH_REENTER_GUEST))
 			break;
 
