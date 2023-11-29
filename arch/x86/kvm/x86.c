@@ -1504,8 +1504,10 @@ static u32 msrs_to_save[ARRAY_SIZE(msrs_to_save_base) +
 static unsigned num_msrs_to_save;
 
 static const u32 emulated_msrs_all[] = {
+#if 0
 	MSR_KVM_SYSTEM_TIME, MSR_KVM_WALL_CLOCK,
 	MSR_KVM_SYSTEM_TIME_NEW, MSR_KVM_WALL_CLOCK_NEW,
+#endif
 	HV_X64_MSR_GUEST_OS_ID, HV_X64_MSR_HYPERCALL,
 	HV_X64_MSR_TIME_REF_COUNT, HV_X64_MSR_REFERENCE_TSC,
 	HV_X64_MSR_TSC_FREQUENCY, HV_X64_MSR_APIC_FREQUENCY,
@@ -1523,10 +1525,10 @@ static const u32 emulated_msrs_all[] = {
 	HV_X64_MSR_SYNDBG_CONTROL, HV_X64_MSR_SYNDBG_STATUS,
 	HV_X64_MSR_SYNDBG_SEND_BUFFER, HV_X64_MSR_SYNDBG_RECV_BUFFER,
 	HV_X64_MSR_SYNDBG_PENDING_BUFFER,
-
+#if 0
 	MSR_KVM_ASYNC_PF_EN, MSR_KVM_STEAL_TIME,
 	MSR_KVM_PV_EOI_EN, MSR_KVM_ASYNC_PF_INT, MSR_KVM_ASYNC_PF_ACK,
-
+#endif
 	MSR_IA32_TSC_ADJUST,
 	MSR_IA32_TSC_DEADLINE,
 	MSR_IA32_ARCH_CAPABILITIES,
@@ -1565,7 +1567,9 @@ static const u32 emulated_msrs_all[] = {
 	MSR_IA32_VMX_VMFUNC,
 
 	MSR_K7_HWCR,
+#if 0
 	MSR_KVM_POLL_CONTROL,
+#endif
 };
 
 static u32 emulated_msrs[ARRAY_SIZE(emulated_msrs_all)];
@@ -2057,6 +2061,22 @@ int kvm_emulate_rdmsr(struct kvm_vcpu *vcpu)
 	u64 data;
 	int r;
 
+	/* #GP(0) fault on reads to these MSRs. */
+	switch(ecx) {
+	case MSR_KVM_WALL_CLOCK:
+	case MSR_KVM_WALL_CLOCK_NEW:
+	case MSR_KVM_SYSTEM_TIME:
+	case MSR_KVM_SYSTEM_TIME_NEW:
+	case MSR_KVM_ASYNC_PF_EN:
+	case MSR_KVM_ASYNC_PF_INT:
+	case MSR_KVM_ASYNC_PF_ACK:
+	case MSR_KVM_STEAL_TIME:
+	case MSR_KVM_PV_EOI_EN:
+	case MSR_KVM_POLL_CONTROL:
+		kvm_inject_gp(vcpu, 0);
+		return 1;
+	}
+
 	r = kvm_get_msr_with_filter(vcpu, ecx, &data);
 
 	if (!r) {
@@ -2081,6 +2101,22 @@ int kvm_emulate_wrmsr(struct kvm_vcpu *vcpu)
 	u32 ecx = kvm_rcx_read(vcpu);
 	u64 data = kvm_read_edx_eax(vcpu);
 	int r;
+
+	/* #GP(0) fault on writes to these MSRs. */
+	switch(ecx) {
+	case MSR_KVM_WALL_CLOCK:
+	case MSR_KVM_WALL_CLOCK_NEW:
+	case MSR_KVM_SYSTEM_TIME:
+	case MSR_KVM_SYSTEM_TIME_NEW:
+	case MSR_KVM_ASYNC_PF_EN:
+	case MSR_KVM_ASYNC_PF_INT:
+	case MSR_KVM_ASYNC_PF_ACK:
+	case MSR_KVM_STEAL_TIME:
+	case MSR_KVM_PV_EOI_EN:
+	case MSR_KVM_POLL_CONTROL:
+		kvm_inject_gp(vcpu, 0);
+		return 1;
+	}
 
 	r = kvm_set_msr_with_filter(vcpu, ecx, data);
 
@@ -2310,7 +2346,7 @@ static s64 get_kvmclock_base_ns(void)
 }
 #endif
 
-static void kvm_write_wall_clock(struct kvm *kvm, gpa_t wall_clock, int sec_hi_ofs)
+__maybe_unused static void kvm_write_wall_clock(struct kvm *kvm, gpa_t wall_clock, int sec_hi_ofs)
 {
 	int version;
 	int r;
@@ -2356,7 +2392,7 @@ static void kvm_write_wall_clock(struct kvm *kvm, gpa_t wall_clock, int sec_hi_o
 	kvm_write_guest(kvm, wall_clock, &version, sizeof(version));
 }
 
-static void kvm_write_system_time(struct kvm_vcpu *vcpu, gpa_t system_time,
+__maybe_unused static void kvm_write_system_time(struct kvm_vcpu *vcpu, gpa_t system_time,
 				  bool old_msr, bool host_initiated)
 {
 	struct kvm_arch *ka = &vcpu->kvm->arch;
@@ -3401,7 +3437,7 @@ static inline bool kvm_pv_async_pf_enabled(struct kvm_vcpu *vcpu)
 	return (vcpu->arch.apf.msr_en_val & mask) == mask;
 }
 
-static int kvm_pv_enable_async_pf(struct kvm_vcpu *vcpu, u64 data)
+__maybe_unused static int kvm_pv_enable_async_pf(struct kvm_vcpu *vcpu, u64 data)
 {
 	gpa_t gpa = data & ~0x3f;
 
@@ -3440,7 +3476,7 @@ static int kvm_pv_enable_async_pf(struct kvm_vcpu *vcpu, u64 data)
 	return 0;
 }
 
-static int kvm_pv_enable_async_pf_int(struct kvm_vcpu *vcpu, u64 data)
+__maybe_unused static int kvm_pv_enable_async_pf_int(struct kvm_vcpu *vcpu, u64 data)
 {
 	/* Bits 8-63 are reserved */
 	if (data >> 8)
