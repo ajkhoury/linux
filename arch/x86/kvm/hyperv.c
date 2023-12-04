@@ -2425,6 +2425,8 @@ static bool hv_check_hypercall_access(struct kvm_vcpu_hv *hv_vcpu, u16 code)
 	case HVCALL_NOTIFY_LONG_SPIN_WAIT:
 		return hv_vcpu->cpuid_cache.enlightenments_ebx &&
 			hv_vcpu->cpuid_cache.enlightenments_ebx != U32_MAX;
+	case HVCALL_CREATE_PARTITION:
+		return hv_vcpu->cpuid_cache.features_ebx & HV_CREATE_PARTITIONS;
 	case HVCALL_POST_MESSAGE:
 		return hv_vcpu->cpuid_cache.features_ebx & HV_POST_MESSAGES;
 	case HVCALL_SIGNAL_EVENT:
@@ -2535,6 +2537,10 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 			break;
 		}
 		kvm_vcpu_on_spin(vcpu, true);
+		break;
+	case HVCALL_CREATE_PARTITION:
+		/* TODO: Implement this later, for now just return an error. */
+		ret = HV_STATUS_FEATURE_UNAVAILABLE;
 		break;
 	case HVCALL_SIGNAL_EVENT:
 		if (unlikely(hc.rep || hc.var_cnt)) {
@@ -2775,6 +2781,7 @@ int kvm_get_hv_cpuid(struct kvm_vcpu *vcpu, struct kvm_cpuid2 *cpuid,
 			ent->eax |= HV_ACCESS_REENLIGHTENMENT;
 			ent->eax |= HV_ACCESS_TSC_INVARIANT;
 
+			ent->ebx |= HV_CREATE_PARTITIONS;
 			ent->ebx |= HV_POST_MESSAGES;
 			ent->ebx |= HV_SIGNAL_EVENTS;
 			ent->ebx |= HV_ENABLE_EXTENDED_HYPERCALLS;
