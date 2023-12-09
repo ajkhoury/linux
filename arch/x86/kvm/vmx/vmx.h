@@ -523,6 +523,7 @@ static inline u8 vmx_get_rvi(void)
 	 CPU_BASED_MONITOR_EXITING |					\
 	 CPU_BASED_INVLPG_EXITING |					\
 	 CPU_BASED_RDPMC_EXITING |					\
+	 CPU_BASED_RDTSC_EXITING |					\
 	 CPU_BASED_INTR_WINDOW_EXITING)
 
 #ifdef CONFIG_X86_64

@@ -187,6 +187,18 @@ static __always_inline unsigned long long rdtsc(void)
 }
 
 /**
+ * rdtscp() - returns the current TSC with MSR_TSC_AUX.
+ */
+static __always_inline unsigned long long rdtscp(u32 *aux)
+{
+	DECLARE_ARGS(val, low, high);
+
+	__asm__ __volatile__("rdtscp"
+			: EAX_EDX_RET(val, low, high), "=c"(*aux));
+	return EAX_EDX_VAL(val, low, high);
+}
+
+/**
  * rdtsc_ordered() - read the current TSC in program order
  *
  * rdtsc_ordered() returns the result of RDTSC as a 64-bit integer.

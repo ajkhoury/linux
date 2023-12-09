@@ -1435,6 +1435,45 @@ int kvm_emulate_rdpmc(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_GPL(kvm_emulate_rdpmc);
 
+static u64 get_emulated_tsc(const u64 rdtsc_real)
+{
+	static u64 rdtsc_emulated = 0, rdtsc_prev = 0;
+
+	if (rdtsc_prev != 0 && rdtsc_real > rdtsc_prev) {
+		const u64 fake_diff = (rdtsc_real - rdtsc_prev) / 20;
+		rdtsc_emulated += fake_diff;
+	}
+	if (rdtsc_emulated > rdtsc_real)
+		rdtsc_emulated = rdtsc_real;
+	rdtsc_prev = rdtsc_real;
+
+	return rdtsc_emulated;
+}
+
+int kvm_emulate_rdtsc(struct kvm_vcpu *vcpu)
+{
+	const u64 tsc = rdtsc();
+	const u64 emulated_tsc = get_emulated_tsc(tsc);
+
+	kvm_rax_write(vcpu, emulated_tsc & 0xffffffff);
+	kvm_rdx_write(vcpu, (emulated_tsc >> 32) & 0xffffffff);
+	return kvm_skip_emulated_instruction(vcpu);
+}
+EXPORT_SYMBOL_GPL(kvm_emulate_rdtsc);
+
+int kvm_emulate_rdtscp(struct kvm_vcpu *vcpu)
+{
+	u32 aux;
+	const u64 tsc = rdtscp(&aux);
+	const u64 emulated_tsc = get_emulated_tsc(tsc);
+
+	kvm_rax_write(vcpu, emulated_tsc & 0xffffffff);
+	kvm_rdx_write(vcpu, (emulated_tsc >> 32) & 0xffffffff);
+	kvm_rcx_write(vcpu, aux);
+	return kvm_skip_emulated_instruction(vcpu);
+}
+EXPORT_SYMBOL_GPL(kvm_emulate_rdtscp);
+
 /*
  * The three MSR lists(msrs_to_save, emulated_msrs, msr_based_features) track
  * the set of MSRs that KVM exposes to userspace through KVM_GET_MSRS,
